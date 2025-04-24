@@ -7,7 +7,7 @@ def handle_peer(conn, addr):
     while True:
         msg = recv_msg(conn)
         if not msg: break
-        print("f{addr}: {msg}")
+        print(f"{addr}: {msg}")
     conn.close()
 
 def start_server():
@@ -29,4 +29,4 @@ def connect_to_peer(host):
 
 # Run one or the other. Eventually each user will be host and client
 # start_server()               # host
-# connect_to_peer('127.0.0.1') # client
+connect_to_peer('127.0.0.1') # client
