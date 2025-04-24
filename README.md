@@ -1,1 +1,1 @@
-# cs576project
+# P2P Chat
