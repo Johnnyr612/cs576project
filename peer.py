@@ -27,6 +27,10 @@ def connect_to_peer(host):
         msg = input("> ")
         send_msg(s, msg)
 
-# Run one or the other. Eventually each user will be host and client
-# start_server()               # host
-connect_to_peer('127.0.0.1') # client
+mode = input("Start as (server/client)? ")
+
+if mode == "server":
+    start_server()      # host
+else:
+    ip = input("Enter server IP: ")
+    connect_to_peer(ip) # client
