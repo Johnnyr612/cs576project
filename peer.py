@@ -1,32 +1,62 @@
 import socket, threading
 from utils import send_msg, recv_msg
 from config import DEFAULT_PORT, BUFFER
+from crypto_utils import (
+    generate_key_pair,
+    serialize_public_key,
+    deserialize_public_key,
+    encrypt_message,
+    decrypt_message
+)
 
 connections = []  # global list to track all peer connections
+peer_public_keys = {}  # {ip: public_key}
+
+# Generate RSA key pair
+my_private_key, my_public_key = generate_key_pair()
 
 # receive message from peer or safely disconnect
-def recv_loop(sock):
-    while True:
-        msg = recv_msg(sock) # receive messages
-        if not msg:
-            print("[*] Connection closed.")
+def recv_loop(sock, addr):
+    peer_ip = addr[0]
+    try:
+        peer_pubkey_bytes = sock.recv(BUFFER)
+        peer_public_keys[peer_ip] = deserialize_public_key(peer_pubkey_bytes)
+        sock.sendall(serialize_public_key(my_public_key))
+        while True:
+            data = sock.recv(BUFFER)
+            if not data:
+                print("[*] Connection closed.")
+                break
+            try:
+                msg = decrypt_message(my_private_key, data)
+                print(f"\n{peer_ip}: {msg}")
+            except Exception as e:
+                print(f"Decryption error from {peer_ip}: {e}")
+    finally:
+        if sock in connections:
             connections.remove(sock)
-            sock.close()
-            break
-        print(f"\nPeer: {msg}")
+        sock.close()
 
 # send message to all peers
 def send_loop():
     while True:
-        msg = input("> ")
+        msg = input("You: ")
         for conn in connections:
-            send_msg(conn, msg)
+            ip = conn.getpeername()[0]
+            if ip in peer_public_keys:
+                try:
+                    encrypted = encrypt_message(peer_public_keys[ip], msg)
+                    conn.sendall(encrypted)
+                except Exception as e:
+                    print(f"Encryption error to {ip}: {e}")
+            else:
+                print(f"[!] No public key for {ip}, message not sent.")
 
 # add to connections and start receive loop
 def handle_peer(conn, addr):
     print(f"[+] Connected to {addr}")
     connections.append(conn)
-    threading.Thread(target=recv_loop, args=(conn,), daemon=True).start() # receiving message thread
+    threading.Thread(target=recv_loop, args=(conn, addr), daemon=True).start() # receiving message thread
 
 # listen to possible peer connections and handle peer connection
 def start_listener(listen_port):
@@ -42,8 +72,11 @@ def start_listener(listen_port):
 def connect_to_peer(host, listen_port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((host, listen_port))
-    print("[*] Connected to remote peer at {host}:{target_port}")
-    handle_peer(s, host)
+    print(f"[*] Connected to remote peer at {host}:{listen_port}")
+    s.sendall(serialize_public_key(my_public_key))
+    peer_pubkey_bytes = s.recv(BUFFER)
+    peer_public_keys[host] = deserialize_public_key(peer_pubkey_bytes)
+    handle_peer(s, (host, listen_port))
 
 # start method that allows user to choose to connect to other peers, choose listening port, etc.
 def start_peer():
