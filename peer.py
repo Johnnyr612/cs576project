@@ -30,6 +30,8 @@ def recv_loop(sock, addr):
             try:
                 msg = decrypt_message(my_private_key, data)
                 print(f"\n{peer_ip}: {msg}")
+                # Ephemeral message: replace after 5 seconds
+                threading.Thread(target=delete_message_notice, args=(peer_ip,), daemon=True).start()
             except Exception as e:
                 print(f"Decryption error from {peer_ip}: {e}")
     finally:
@@ -37,6 +39,11 @@ def recv_loop(sock, addr):
             connections.remove(sock)
         sock.close()
 
+# print [message deleted] after delay
+def delete_message_notice(peer_ip):
+    time.sleep(5)
+    print(f"{peer_ip}: [message deleted]")
+    
 # send message to all peers
 def send_loop():
     while True:
