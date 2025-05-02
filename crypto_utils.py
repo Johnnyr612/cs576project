@@ -1,17 +1,23 @@
 # crypto_utils.py
 
+# this module handles all cryptographic operations:
+    # -RSA key generation
+    # -public key serialization/deserializatino
+    # -message encryption/decryption
+
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 
-# Create a new RSA key pair
+# generate a new RSA key pair (private + public)
 def generate_key_pair():
+    # 2048-bit RSA
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=2048,
     )
     return private_key, private_key.public_key()
 
-# Turn public key into bytes for sending
+# convert public key to bytes (PEM format) for sending over the network
 def serialize_public_key(public_key):
     return public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -25,15 +31,15 @@ def deserialize_public_key(pubkey_bytes):
 # Encrypt a message using the peer's public key
 def encrypt_message(public_key, message):
     return public_key.encrypt(
-        message.encode(),
+        message.encode(), # convert string to bytes
         padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
+            mgf=padding.MGF1(algorithm=hashes.SHA256()), # mask generation function
+            algorithm=hashes.SHA256(), # hash function
             label=None
         )
     )
 
-# Decrypt a message using your private key
+# Decrypt a message (bytes) using your private key
 def decrypt_message(private_key, ciphertext):
     return private_key.decrypt(
         ciphertext,
@@ -42,4 +48,4 @@ def decrypt_message(private_key, ciphertext):
             algorithm=hashes.SHA256(),
             label=None
         )
-    ).decode()
+    ).decode() # convert bytes back to string
