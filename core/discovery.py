@@ -1,14 +1,33 @@
+# core/discovery.py
 # Peer Discovery via UDP broadcast
+
 import socket
 import threading
 import time
 
-DISCOVERY_PORT = 9999 # port for UDP broadcast/listening
-BROADCAST_INTERVAL = 5 # seconds between sending hello packets
-PEER_TIMEOUT = 60 # time before a peer is considered inactive
+from core.config import BUFFER
 
-active_peers = {}  # {ip: last_seen_timestamp}
-lock = threading.Lock()
+DISCOVERY_PORT = 9999   # port for UDP broadcast/listening
+BROADCAST_INTERVAL = 5  # seconds between sending hello packets
+PEER_TIMEOUT = 60       # time before a peer is considered inactive
+
+active_peers = {}       # {ip: last_seen_timestamp}
+lock = threading.Lock() # thread-safe access to active_peers
+
+# grab ip address to prevent connecting to yourself
+def get_own_ip():
+    try:
+        # use a reserved, unreachable IP to force interface resolution
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.0.2.1", 1)) # no traffic sent
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+OWN_IP = get_own_ip()
+print(f"[DEBUG] OWN_IP = {OWN_IP}")
 
 # periodically broadcasts a hello message containing this peer's listening port
 def broadcast_hello(listen_port):
@@ -27,8 +46,12 @@ def listen_for_peers():
     s.bind(('', DISCOVERY_PORT))
 
     while True:
-        data, addr = s.recvfrom(1024)
+        data, addr = s.recvfrom(BUFFER)
         ip = addr[0]
+
+        if ip == OWN_IP:
+            continue # skip yourself
+
         try:
             if data.startswith(b'Hello:'):
                 port = int(data.split(b':')[1])

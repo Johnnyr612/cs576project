@@ -1,8 +1,12 @@
 # peer.py
 import socket
 import threading
+import time
 
 from datetime import datetime
+
+from core.discovery import start_discovery, get_active_peers, get_own_ip
+OWN_IP = get_own_ip()
 
 from core.utils import send_msg, recv_msg
 from core.config import DEFAULT_PORT, BUFFER
@@ -153,13 +157,20 @@ def start_chat_node():
     listen_port = int(input(f"Enter your listening port (default {DEFAULT_PORT}): ") or DEFAULT_PORT)
     threading.Thread(target=start_connection_listener, args=(listen_port,), daemon=True).start()
 
-    choice = input("Connect to existing peer? (y/n) ").lower()
-    if choice == 'y':
-        ip = input("Enter peer IP to connect: ")
-        peer_port = int(input("Enter peer's listening port: "))
-        initiate_peer_connections(ip, peer_port)
-    else:
-        print("[*] No connection. Chat locally or wait for others...")
+    # start peer discovery
+    start_discovery(listen_port)
+
+    # auto-connect to discovered peers
+    def connect_to_peers():
+        while True:
+            for ip, port in get_active_peers():
+                if ip == OWN_IP or ip in connected_ips:
+                    continue # skip yourself or already connected
+                print(f"[Discovery] Connecting to {ip}:{port}")
+                initiate_peer_connections(ip, port)
+            time.sleep(5)
+
+    threading.Thread(target=connect_to_peers, daemon=True).start()
 
     print("[*] Type your message and press Enter to send.")
     print("[*] Type /help to see available commands.")
