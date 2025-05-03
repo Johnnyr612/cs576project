@@ -1,2 +1,2 @@
-from peer import start_peer
-start_peer()
+from core.peer import start_chat_node
+start_chat_node()
