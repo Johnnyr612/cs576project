@@ -5,8 +5,8 @@
     # -public key serialization/deserializatino
     # -message encryption/decryption
 
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding # type: ignore
+from cryptography.hazmat.primitives import serialization, hashes # type: ignore
 
 # generate a new RSA key pair (private + public)
 def generate_key_pair():

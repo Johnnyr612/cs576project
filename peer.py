@@ -1,28 +1,69 @@
 # peer.py
-import socket, threading
+import socket
+import threading
+
 from utils import send_msg, recv_msg
 from config import DEFAULT_PORT, BUFFER
-from crypto_utils import (
+from ephemeral import delete_after_delay
+from crypto.crypto_utils import (
     generate_key_pair,
     serialize_public_key,
     deserialize_public_key,
     encrypt_message,
     decrypt_message
 )
-from ephemeral import delete_after_delay
 
-connections = []
-peer_public_keys = {}
+### -----------------------------
+### Global State
+### -----------------------------
+connections = []        # active TCP connections
+peer_public_keys = {}   # {ip: public_key}
+connected_ips = set()   # to avoid duplicate connections
 
 my_private_key, my_public_key = generate_key_pair()
 
+### -----------------------------
+### Connection Handling
+### -----------------------------
+def handle_peer(conn, addr):
+    print(f"[+] Connected to {addr}")
+    connections.append(conn)
+    connected_ips.add(addr[0])
+    threading.Thread(target=recv_loop, args=(conn, addr), daemon=True).start()
+
+def start_listener(listen_port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('', listen_port))
+    s.listen()
+    print(f"[*] Listening for incoming peer connections on port {listen_port}...")
+    while True:
+        conn, addr = s.accept()
+        handle_peer(conn, addr)
+
+def connect_to_peer(host, listen_port):
+    if host in connected_ips:
+        print(f"[!] Already connected to {host}, skipping.")
+        return
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, listen_port))
+    print(f"[*] Connected to remote peer at {host}:{listen_port}")
+    s.sendall(serialize_public_key(my_public_key))
+    peer_pubkey_bytes = s.recv(BUFFER)
+    peer_public_keys[host] = deserialize_public_key(peer_pubkey_bytes)
+    handle_peer(s, (host, listen_port))
+
+### -----------------------------
+### Communication Loops
+### -----------------------------
 def recv_loop(sock, addr):
     peer_ip = addr[0]
     try:
+        # exchange keys
         peer_pubkey_bytes = sock.recv(BUFFER)
         peer_public_keys[peer_ip] = deserialize_public_key(peer_pubkey_bytes)
         sock.sendall(serialize_public_key(my_public_key))
 
+        # receive messages
         while True:
             data = sock.recv(BUFFER)
             if not data:
@@ -53,29 +94,9 @@ def send_loop():
             else:
                 print(f"[!] No public key for {ip}, message not sent.")
 
-def handle_peer(conn, addr):
-    print(f"[+] Connected to {addr}")
-    connections.append(conn)
-    threading.Thread(target=recv_loop, args=(conn, addr), daemon=True).start()
-
-def start_listener(listen_port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('', listen_port))
-    s.listen()
-    print(f"[*] Listening for incoming peer connections on port {listen_port}...")
-    while True:
-        conn, addr = s.accept()
-        handle_peer(conn, addr)
-
-def connect_to_peer(host, listen_port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, listen_port))
-    print(f"[*] Connected to remote peer at {host}:{listen_port}")
-    s.sendall(serialize_public_key(my_public_key))
-    peer_pubkey_bytes = s.recv(BUFFER)
-    peer_public_keys[host] = deserialize_public_key(peer_pubkey_bytes)
-    handle_peer(s, (host, listen_port))
-
+### -----------------------------
+### Main Entry Point
+### -----------------------------
 def start_peer():
     listen_port = int(input(f"Enter your listening port (default {DEFAULT_PORT}): ") or DEFAULT_PORT)
     threading.Thread(target=start_listener, args=(listen_port,), daemon=True).start()
@@ -89,5 +110,3 @@ def start_peer():
         print("[*] No connection. Chat locally or wait for others...")
 
     send_loop()
-
-start_peer()
