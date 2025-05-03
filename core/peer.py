@@ -7,6 +7,7 @@ from datetime import datetime
 from core.utils import send_msg, recv_msg
 from core.config import DEFAULT_PORT, BUFFER
 from core.ephemeral import delete_after_delay
+from core.commands import handle_command
 from crypto.crypto_utils import (
     generate_key_pair,
     serialize_public_key,
@@ -112,7 +113,22 @@ def listen_for_messages(sock, addr):
 
 def prompt_and_send_messages():
     while True:
+        # TODO: terminal echoes input automatically.
+        # this print duplicates the message
+        # will be resolved cleanly in GUI where input/output are separats
         msg = input()
+
+        # if the message is a command, handle it
+        if msg.startswith("/"):
+            handle_command(
+                cmd=msg.strip(),
+                my_name=my_name,
+                connections=connections,
+                peer_names=peer_names,
+                peer_public_keys=peer_public_keys
+            )
+            continue
+
         timestamp = datetime.now().strftime('%H:%M')
         print(f"[{timestamp}] You: {msg}")
 
@@ -144,5 +160,8 @@ def start_chat_node():
         initiate_peer_connections(ip, peer_port)
     else:
         print("[*] No connection. Chat locally or wait for others...")
+
+    print("[*] Type your message and press Enter to send.")
+    print("[*] Type /help to see available commands.")
 
     prompt_and_send_messages()
