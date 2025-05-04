@@ -1,9 +1,24 @@
+## TODO / Future Features
+
+- [ ] GUI frontend (`gui/`)
+- [ ] Blockchain-based message verification (`blockchain/`)
+- [ ] Message logs and history export
+- [ ] Private messaging channels
+- [ ] Authentication and identity verification
+- [ ] Connection resilience and reconnect attempts
+
+---
+
 # P2P Chat
 
-A decentralized, peer-to-peer messaging app built in Python.
+A decentralized, peer-to-peer messaging app built in Python with encrypted communication, LAN discovery, and terminal-based messaging (for now).
+
+Additional notes (TODO): Cost of advertising? Decentralized user authentication or message verification? Blockchain usage?
+
+---
 
 ## Project Structure
-Initial idea for project structure (subject to change):
+Idea for project structure (subject to change):
 ```
 p2p-chat/
 ├── main.py                   # Entry point
@@ -11,18 +26,51 @@ p2p-chat/
 │   ├── peer.py               # Core P2P logic (Peer connection, encrypted messaging, and input/output loop)
 │   ├── ephemeral.py          # Ephemeral messaging
 │   ├── discovery.py          # Peer discovery (UDP)
-│   ├── config.py             # Constants used across modules
-│   ├── utils.py              # Reusable utilities
-├── crypto/              	  # Cryptographic operations (RSA encryption, key generation, serialization)
-│   ├── __init__.py
-│   ├── keygen.py 			  # RSA key pair generation
-│   ├── serialize.py          # Public key serialization and deserialization (PEM format)
-│   ├── rsa_crypto.py         # RSA-based encryption and decryption with OAEP padding
+│   ├── config.py             # Constants used across modules (port, buffer size, etc.)
+│   ├── utils.py              # Reusable system-level helpers
+├── crypto/
+│   ├── crypto_utils.py       # RSA key generation, encryption, and serialization
 ├── gui/                      # (optional, for future GUI)
 ├── blockchain/               # (optional, for message chain or verification)
 ├── README.md
+├── requirements.txt
 ```
 
+---
 
-Additional notes:
-Cost of advertising? Decentralized user authentication or message verification? Blockchain usage?
+## Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/DarkSideShadows/cs576project.git
+cd p2p-chat
+```
+
+### 2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Run the app
+
+```bash
+python main.py
+```
+
+Each peer should choose a unique nickname and port. Peers on the same network will auto-discover each other and exchange encrypted messages.
+
+---
+
+## Available Commands
+
+| Command     | Description                                |
+|-------------|--------------------------------------------|
+| `/help`     | Show available commands                    |
+| `/peers`    | List connected peers                       |
+| `/me`       | Send a third-person message                |
+| `/clear`    | Clear the terminal screen                  |
+| `/quit`     | Disconnect and exit                        |
+
+---
