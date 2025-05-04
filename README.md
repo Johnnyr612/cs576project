@@ -1,11 +1,10 @@
 ## TODO / Future Features
-
 - [ ] GUI frontend (`gui/`)
 - [ ] Blockchain-based message verification (`blockchain/`)
-- [ ] Message logs and history export
-- [ ] Private messaging channels
-- [ ] Authentication and identity verification
-- [ ] Connection resilience and reconnect attempts
+- [ ] Identity authentication and peer verification
+- [ ] Private messaging channels (`/msg`)
+- [ ] Connection resilience and reconnection logic
+- [ ] Discovery performance: optimize advertising frequency, reduce spam
 
 ---
 
