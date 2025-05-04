@@ -100,8 +100,14 @@ def listen_for_messages(sock, addr):
         while True:
             data = sock.recv(BUFFER)
             if not data:
-                print("[*] Connection closed.")
-                connections.remove(sock)
+                name = peer_names.get(peer_ip, peer_ip)
+                print(f"[*] Connection to {name} ({peer_ip}) closed.")
+
+                if sock in connections:
+                    connections.remove(sock)
+                peer_public_keys.pop(peer_ip, None)
+                peer_names.pop(peer_ip, None)
+
                 sock.close()
                 break
             try:
