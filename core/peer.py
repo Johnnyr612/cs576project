@@ -5,10 +5,8 @@ import time
 
 from datetime import datetime
 
-from core.discovery import start_discovery, get_active_peers, get_own_ip
-OWN_IP = get_own_ip()
-
-from core.utils import send_msg, recv_msg
+from core.discovery import start_discovery, get_active_peers
+from core.utils import send_msg, recv_msg, get_all_local_ips
 from core.config import DEFAULT_PORT, BUFFER
 from core.ephemeral import delete_after_delay
 from core.commands import handle_command
@@ -29,6 +27,8 @@ connected_ips = set()   # to avoid duplicate connections
 
 peer_names = {} # {ip: nickname}
 my_name = ""    # set at startup
+
+LOCAL_IPS = get_all_local_ips()
 
 my_private_key, my_public_key = generate_key_pair()
 
@@ -164,7 +164,7 @@ def start_chat_node():
     def connect_to_peers():
         while True:
             for ip, port in get_active_peers():
-                if ip == OWN_IP or ip in connected_ips:
+                if ip in LOCAL_IPS or ip in connected_ips:
                     continue # skip yourself or already connected
                 print(f"[Discovery] Connecting to {ip}:{port}")
                 initiate_peer_connections(ip, port)
