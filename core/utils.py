@@ -1,52 +1,84 @@
 # core/utils.py
+# Utility functions for socket I/O and IP discovery
 
 import socket
 import subprocess
 import re
+import logging
 
 from core.config import BUFFER
 
-def send_msg(sock, msg):
-    sock.sendall(msg.encode())
 
-def recv_msg(sock):
-    try: return sock.recv(BUFFER).decode()
-    except: return ""
+def send_msg(sock: socket.socket, msg: str) -> None:
+    """
+    Send a UTF-8 encoded message over the given socket.
 
-# prevent connecting to yourself
-# TODO: scuffed fix - i kept running into issues where i would connect to my WSL IP address and didnt know how to fix it
-# TODO: this is a temporary fix, if someone could look into this as well that would be great
-def get_all_local_ips():
-    ips = set()
-
-    # method 1: try connect trick (should get real LAN IP)
+    Errors are logged rather than raised.
+    """
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("192.0.2.1", 1))
-        ips.add(s.getsockname()[0])
-        s.close()
-    except:
-        pass
+        sock.sendall(msg.encode('utf-8'))
+    except Exception as e:
+        logging.error(f"[utils] send_msg failed: {e}")
 
-    # method 2: fallback to getaddrinfo
+
+def recv_msg(sock: socket.socket) -> str | None:
+    """
+    Receive up to BUFFER bytes from the socket and return the decoded string.
+
+    Returns None if the connection is closed or on error.
+    """
+    try:
+        data = sock.recv(BUFFER)
+        if not data:
+            # Connection closed by peer
+            return None
+        return data.decode('utf-8', errors='replace')
+    except Exception as e:
+        logging.error(f"[utils] recv_msg failed: {e}")
+        return None
+
+
+def get_all_local_ips() -> set[str]:
+    """
+    Gather all non-loopback IPv4 addresses of this machine.
+
+    Uses three methods for resilience:
+    1. Connect-trick to external address to fetch primary LAN IP.
+    2. socket.getaddrinfo() for host-based IPs.
+    3. Parsing `ip -4 addr` output on Linux/WSL.
+
+    Returns a set of IP strings, excluding '127.0.0.1' and '0.0.0.0'.
+    """
+    ips: set[str] = set()
+
+    # Method 1: connect-trick
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            # Use a public IP; no packets are actually sent
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+    except Exception as e:
+        logging.debug(f"[utils] connect-trick failed: {e}")
+
+    # Method 2: getaddrinfo
     try:
         hostname = socket.gethostname()
         for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = info[4][0]
-            ips.add(ip)
-    except:
-        pass
+            ips.add(info[4][0])
+    except Exception as e:
+        logging.debug(f"[utils] getaddrinfo failed: {e}")
 
-    # method 3: WSL-safe interface scan (shell call)
+    # Method 3: parse `ip addr` on Linux/WSL
     try:
-        output = subprocess.check_output(["ip", "-4", "addr"], encoding="utf-8")
-        matches = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", output)
-        for ip in matches:
-            if not ip.startswith("127."):
-                ips.add(ip)
-    except:
-        pass
+        output = subprocess.check_output(
+            ["ip", "-4", "addr"], stderr=subprocess.DEVNULL, text=True
+        )
+        for match in re.findall(r"inet (\d+\.\d+\.\d+\.\d+)/", output):
+            ips.add(match)
+    except Exception as e:
+        logging.debug(f"[utils] ip-addr scan failed: {e}")
 
-    # always skip localhost
-    ips.add("127.0.0.1")
+    # Exclude loopback and unspecified addresses
+    ips.discard("127.0.0.1")
+    ips.discard("0.0.0.0")
     return ips
