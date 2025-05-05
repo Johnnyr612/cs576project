@@ -6,7 +6,7 @@ from crypto.crypto_utils import encrypt_message
 
 def handle_command(cmd, my_name, connections, peer_names, peer_public_keys):
     parts = cmd.strip().split(maxsplit=1)
-    base = parts[0] # the main command
+    base = parts[0]  # the main command
 
     # prints a list of supported commands with a short description
     if base == "/help":
@@ -32,9 +32,8 @@ def handle_command(cmd, my_name, connections, peer_names, peer_public_keys):
         for conn in connections:
             try:
                 conn.close()
-            except:
-                pass
-        exit(0)
+            except Exception as e:
+                print(f"[!] Error closing connection: {e}")
 
     # clears the terminal screen using a cross-platform call
     elif base == "/clear":
@@ -43,20 +42,24 @@ def handle_command(cmd, my_name, connections, peer_names, peer_public_keys):
     # sends a message in third person format
     elif base == "/me":
         if len(parts) == 2:
-            action = f"* {my_name} {parts[1]}"
+            action    = f"* {my_name} {parts[1]}"
             timestamp = datetime.now().strftime('%H:%M')
             print(f"[{timestamp}] {action}")
+
             for conn in connections:
-                ip = conn.getpeername()[0]
-                if ip in peer_public_keys:
-                    try:
-                        encrypted = encrypt_message(peer_public_keys[ip], action)
-                        conn.sendall(encrypted)
-                    except Exception as e:
-                        print(f"Encryption error to {ip}: {e}")
+                ip  = conn.getpeername()[0]
+                key = peer_public_keys.get(ip)
+                if not key:
+                    print(f"[!] No public key for {ip}, skipping /me")
+                    continue
+                try:
+                    data = encrypt_message(key, action)
+                    conn.sendall(data)
+                except Exception as e:
+                    print(f"[!] Encryption error to {ip}: {e}")
         else:
             print("[!] Usage: /me <action>")
 
-    # handle unrecognized commands
+    # catch-all for any unknown commands
     else:
-        print(f"[!] Unknown command: {cmd}. Try /help.")
+        print(f"[!] Unknown command: {base}. Try /help.")
