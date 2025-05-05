@@ -1,8 +1,8 @@
-# peer.py
+# core/peer.py
+
 import socket
 import threading
 import time
-
 from datetime import datetime
 
 from core.discovery import start_discovery, get_active_peers
@@ -40,21 +40,36 @@ def start_connection_listener(listen_port):
     s.bind(('', listen_port))
     s.listen()
     print(f"[*] Listening for incoming peer connections on port {listen_port}...")
-    while True:
-        conn, addr = s.accept()
-        accept_incoming_connections(conn, addr)
+
+    # Run accept-loop in daemon thread for graceful shutdown
+    def _accept_loop():
+        while True:
+            try:
+                conn, addr = s.accept()
+                accept_incoming_connections(conn, addr)
+            except Exception as e:
+                print(f"[!] Listener error: {e}")
+                break
+
+    threading.Thread(target=_accept_loop, daemon=True).start()
+
 
 def accept_incoming_connections(conn, addr):
     perform_handshake(conn, addr, is_incoming=True)
+
 
 def initiate_peer_connections(host, listen_port):
     if host in connected_ips:
         print(f"[!] Already connected to {host}, skipping.")
         return
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, listen_port))
-    perform_handshake(s, (host, listen_port), is_incoming=False)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, listen_port))
+        perform_handshake(s, (host, listen_port), is_incoming=False)
+    except Exception as e:
+        print(f"[!] Connection attempt to {host}:{listen_port} failed: {e}")
+
 
 def perform_handshake(sock, addr, is_incoming):
     peer_ip = addr[0]
@@ -84,6 +99,7 @@ def perform_handshake(sock, addr, is_incoming):
         connected_ips.add(peer_ip)
         print(f"[+] Secure connection established with {peer_name} ({peer_ip})")
 
+        # spawn a thread to listen for incoming messages on this socket
         threading.Thread(target=listen_for_messages, args=(sock, addr), daemon=True).start()
 
     except Exception as e:
@@ -96,13 +112,18 @@ def perform_handshake(sock, addr, is_incoming):
 def listen_for_messages(sock, addr):
     peer_ip = addr[0]
     try:
-        # receive messages
         while True:
-            data = sock.recv(BUFFER)
+            try:
+                data = sock.recv(BUFFER)
+            except Exception as e:
+                print(f"[!] Receive error from {peer_ip}: {e}")
+                break
+
             if not data:
                 name = peer_names.get(peer_ip, peer_ip)
                 print(f"[*] Connection to {name} ({peer_ip}) closed.")
 
+                # clean up on disconnect
                 if sock in connections:
                     connections.remove(sock)
                 peer_public_keys.pop(peer_ip, None)
@@ -110,26 +131,25 @@ def listen_for_messages(sock, addr):
 
                 sock.close()
                 break
+
             try:
                 msg = decrypt_message(my_private_key, data)
                 timestamp = datetime.now().strftime('%H:%M')
-                name = peer_names.get(peer_ip, peer_ip) # fallback to peer_ip as username
+                name = peer_names.get(peer_ip, peer_ip)
                 print(f"\n[{timestamp}] {name}: {msg}")
                 delete_after_delay(peer_ip)
             except Exception as e:
-                print(f"Decryption error from {peer_ip}: {e}")
+                print(f"[!] Decryption error from {peer_ip}: {e}")
     except Exception as e:
-        print(f"Connection error: {e}")
+        print(f"[!] Connection loop error: {e}")
+
 
 def prompt_and_send_messages():
     while True:
-        # TODO: terminal echoes input automatically.
-        # this print duplicates the message
-        # will be resolved cleanly in GUI where input/output are separats
         msg = input()
 
-        # if the message is a command, handle it
-        if msg.startswith("/"):
+        # handle slash-commands
+        if msg.startswith('/'):
             handle_command(
                 cmd=msg.strip(),
                 my_name=my_name,
@@ -142,16 +162,19 @@ def prompt_and_send_messages():
         timestamp = datetime.now().strftime('%H:%M')
         print(f"[{timestamp}] You: {msg}")
 
-        for conn in connections:
+        # iterate over a copy to allow removal on failure
+        for conn in list(connections):
             ip = conn.getpeername()[0]
-            if ip in peer_public_keys:
-                try:
-                    encrypted = encrypt_message(peer_public_keys[ip], msg)
-                    conn.sendall(encrypted)
-                except Exception as e:
-                    print(f"Encryption error to {ip}: {e}")
-            else:
+            key = peer_public_keys.get(ip)
+            if not key:
                 print(f"[!] No public key for {ip}, message not sent.")
+                continue
+            try:
+                encrypted = encrypt_message(key, msg)
+                conn.sendall(encrypted)
+            except Exception as e:
+                print(f"[!] Encryption/send error to {ip}: {e}")
+                connections.remove(conn)
 
 ### -----------------------------
 ### Main Entry Point
@@ -163,15 +186,15 @@ def start_chat_node():
     listen_port = int(input(f"Enter your listening port (default {DEFAULT_PORT}): ") or DEFAULT_PORT)
     threading.Thread(target=start_connection_listener, args=(listen_port,), daemon=True).start()
 
-    # start peer discovery
+    # start peer discovery in background
     start_discovery(listen_port)
 
-    # auto-connect to discovered peers
+    # auto-connect to discovered peers periodically
     def connect_to_peers():
         while True:
             for ip, port in get_active_peers():
                 if ip in LOCAL_IPS or ip in connected_ips:
-                    continue # skip yourself or already connected
+                    continue # skip self or already connected
                 print(f"[Discovery] Connecting to {ip}:{port}")
                 initiate_peer_connections(ip, port)
             time.sleep(5)
